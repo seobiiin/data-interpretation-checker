@@ -30,6 +30,7 @@ if uploaded_file is not None:
         data = pd.read_csv(uploaded_file, encoding="cp949")
 
     st.subheader("업로드한 데이터")
+
     st.dataframe(
         data,
         use_container_width=True
@@ -85,11 +86,12 @@ if uploaded_file is not None:
     default_exclude = []
 
     for column in numeric_columns:
+
         column_lower = str(column).lower()
 
         if (
             "번호" in str(column)
-            or "id" == column_lower
+            or column_lower == "id"
             or column_lower.endswith("_id")
         ):
             default_exclude.append(column)
@@ -97,7 +99,11 @@ if uploaded_file is not None:
     excluded_columns = st.multiselect(
         "이상치 검사에서 제외할 변수를 선택하세요",
         numeric_columns,
-        default=default_exclude
+        default=default_exclude,
+        help=(
+            "학생번호, ID, 학번처럼 식별을 위한 숫자 변수는 "
+            "이상치 검사에서 제외할 수 있습니다."
+        )
     )
 
     outlier_results = []
@@ -110,9 +116,12 @@ if uploaded_file is not None:
         clean_values = data[column].dropna()
 
         if len(clean_values) < 4:
+
             outlier_count = 0
+            outlier_values = []
 
         else:
+
             q1 = clean_values.quantile(0.25)
             q3 = clean_values.quantile(0.75)
 
@@ -121,34 +130,63 @@ if uploaded_file is not None:
             lower_bound = q1 - 1.5 * iqr
             upper_bound = q3 + 1.5 * iqr
 
-            outlier_count = (
+            outliers = clean_values[
                 (clean_values < lower_bound)
                 | (clean_values > upper_bound)
-            ).sum()
+            ]
+
+            outlier_count = len(outliers)
+
+            outlier_values = (
+                outliers
+                .drop_duplicates()
+                .tolist()
+            )
+
+        if len(outlier_values) == 0:
+
+            value_text = "-"
+
+        else:
+
+            # 후보가 너무 많으면 화면이 지나치게 길어지는 것을 방지
+            display_values = outlier_values[:10]
+
+            value_text = ", ".join(
+                map(str, display_values)
+            )
+
+            if len(outlier_values) > 10:
+                value_text += " ..."
 
         outlier_results.append({
             "변수": column,
-            "이상치 후보 개수": int(outlier_count)
+            "이상치 후보 개수": int(outlier_count),
+            "후보 값": value_text
         })
 
     outlier_info = pd.DataFrame(outlier_results)
 
     if len(outlier_info) > 0:
+
         st.dataframe(
             outlier_info,
             hide_index=True,
             use_container_width=True
         )
+
     else:
+
         st.info(
             "현재 설정으로 이상치를 검사할 "
             "수치형 변수가 없습니다."
         )
 
     st.info(
-        "이상치 후보는 반드시 오류이거나 제거해야 하는 값이라는 "
-        "뜻은 아닙니다. 실제 관측값인지 입력 오류인지 확인하고, "
-        "분석 결과에 미치는 영향을 함께 살펴볼 필요가 있습니다."
+        "IQR 방식은 다른 값들과 비교해 통계적으로 멀리 떨어진 "
+        "값을 이상치 후보로 찾습니다. 후보 값이 실제 관측값인지 "
+        "입력 오류인지는 자동으로 판단할 수 없으므로 "
+        "후보 값을 직접 확인해야 합니다."
     )
 
     # =========================
@@ -175,15 +213,17 @@ if uploaded_file is not None:
         top_category = counts.index[0]
         top_count = int(counts.iloc[0])
 
+        valid_count = len(clean_values)
+
         top_ratio = (
-            top_count / len(clean_values) * 100
+            top_count / valid_count * 100
         )
 
         category_results.append({
             "변수": column,
             "가장 많은 범주": top_category,
             "개수": top_count,
-            "유효 관측치 수": len(clean_values),
+            "유효 관측치 수": valid_count,
             "비율(%)": round(top_ratio, 1)
         })
 
@@ -204,11 +244,12 @@ if uploaded_file is not None:
                 st.warning(
                     f"'{result['변수']}' 변수에서 "
                     f"'{result['가장 많은 범주']}' 범주가 "
-                    f"{result['개수']}/{result['유효 관측치 수']}개"
+                    f"{result['개수']}/"
+                    f"{result['유효 관측치 수']}개 "
                     f"({result['비율(%)']:.1f}%)를 차지합니다. "
-                    "특정 범주에 관측치가 많이 분포되어 있으므로 "
+                    "비율뿐 아니라 실제 관측 개수도 함께 확인하고, "
                     "전체 집단으로 일반화할 때 데이터의 구성과 "
-                    "수집 방식을 함께 확인할 필요가 있습니다."
+                    "수집 방식을 살펴보세요."
                 )
 
     else:
@@ -243,12 +284,11 @@ if uploaded_file is not None:
 
         ratio = float(missing_ratio[column])
 
-        # 결측 비율이 높은 경우
         if ratio >= 10:
 
             st.warning(
                 f"결측치 주의: '{column}' 변수에 "
-                f"{count}/{row_count}개의 결측치"
+                f"{count}/{row_count}개의 결측치 "
                 f"({ratio:.1f}%)가 있습니다. "
                 "전체 관측치에서 차지하는 비율이 비교적 크므로 "
                 "결측치를 제외하거나 대체하는 방식에 따라 "
@@ -258,12 +298,11 @@ if uploaded_file is not None:
 
             warning_found = True
 
-        # 비율은 작지만 결측치는 존재하는 경우
         else:
 
             st.info(
                 f"결측치 안내: '{column}' 변수에 "
-                f"{count}/{row_count}개의 결측치"
+                f"{count}/{row_count}개의 결측치 "
                 f"({ratio:.1f}%)가 있습니다. "
                 "결측치가 존재하지만 현재 표본에서 차지하는 "
                 "비율은 크지 않습니다. 다만 결측 발생 원인과 "
@@ -281,15 +320,16 @@ if uploaded_file is not None:
                 f"이상치 후보 확인 필요: "
                 f"'{result['변수']}' 변수에서 "
                 f"{result['이상치 후보 개수']}개의 "
-                "이상치 후보가 확인되었습니다. "
-                "이를 바로 제거하지 말고 실제 관측값인지 "
-                "입력 오류인지 확인하고 분석 결과에 미치는 "
-                "영향을 살펴볼 필요가 있습니다."
+                f"이상치 후보가 확인되었습니다. "
+                f"후보 값: {result['후보 값']}. "
+                "후보 값을 직접 확인하여 실제 관측값인지 "
+                "입력 오류인지 판단하고, 분석 결과에 미치는 "
+                "영향을 살펴보세요."
             )
 
             warning_found = True
 
-    # ----- 범주형 쏠림 -----
+    # ----- 범주 쏠림 -----
 
     for result in category_results:
 
@@ -299,11 +339,11 @@ if uploaded_file is not None:
                 f"범주 분포 확인 필요: "
                 f"'{result['변수']}' 변수에서 "
                 f"'{result['가장 많은 범주']}' 범주가 "
-                f"{result['개수']}/{result['유효 관측치 수']}개"
+                f"{result['개수']}/"
+                f"{result['유효 관측치 수']}개 "
                 f"({result['비율(%)']:.1f}%)를 차지합니다. "
                 "이 분포가 실제 집단의 특성인지 표본 수집 "
-                "과정에서 나타난 것인지 확인한 뒤 "
-                "해석해야 합니다."
+                "과정에서 나타난 것인지 확인한 뒤 해석하세요."
             )
 
             warning_found = True
@@ -382,15 +422,12 @@ if uploaded_file is not None:
             "확인하지 않은 내용을 모르는 상태에서 분석 결과를 "
             "과도하게 일반화하지 않도록 주의하세요."
         )
+
     # =========================
     # 7. 최종 점검 요약
     # =========================
 
     st.subheader("7. 최종 점검 요약")
-
-    # -------------------------
-    # 결측치 수준 계산
-    # -------------------------
 
     high_missing_variables = []
     low_missing_variables = []
@@ -409,29 +446,17 @@ if uploaded_file is not None:
         else:
             low_missing_variables.append(column)
 
-    # -------------------------
-    # 이상치 후보 변수 계산
-    # -------------------------
-
     outlier_variables = [
         result["변수"]
         for result in outlier_results
         if result["이상치 후보 개수"] > 0
     ]
 
-    # -------------------------
-    # 범주 쏠림 변수 계산
-    # -------------------------
-
     imbalance_variables = [
         result["변수"]
         for result in category_results
         if result["비율(%)"] >= 80
     ]
-
-    # -------------------------
-    # 요약표
-    # -------------------------
 
     summary_rows = []
 
@@ -442,6 +467,7 @@ if uploaded_file is not None:
     })
 
     if len(high_missing_variables) > 0:
+
         summary_rows.append({
             "점검 항목": "결측치",
             "결과": (
@@ -452,6 +478,7 @@ if uploaded_file is not None:
         })
 
     if len(low_missing_variables) > 0:
+
         summary_rows.append({
             "점검 항목": "결측치",
             "결과": (
@@ -465,6 +492,7 @@ if uploaded_file is not None:
         len(high_missing_variables) == 0
         and len(low_missing_variables) == 0
     ):
+
         summary_rows.append({
             "점검 항목": "결측치",
             "결과": "발견되지 않음",
@@ -472,6 +500,7 @@ if uploaded_file is not None:
         })
 
     if len(outlier_variables) > 0:
+
         summary_rows.append({
             "점검 항목": "이상치 후보",
             "결과": (
@@ -480,7 +509,9 @@ if uploaded_file is not None:
             ),
             "수준": "확인"
         })
+
     else:
+
         summary_rows.append({
             "점검 항목": "이상치 후보",
             "결과": "발견되지 않음",
@@ -488,6 +519,7 @@ if uploaded_file is not None:
         })
 
     if len(imbalance_variables) > 0:
+
         summary_rows.append({
             "점검 항목": "범주 쏠림",
             "결과": (
@@ -496,7 +528,9 @@ if uploaded_file is not None:
             ),
             "수준": "확인"
         })
+
     else:
+
         summary_rows.append({
             "점검 항목": "범주 쏠림",
             "결과": "발견되지 않음",
@@ -521,11 +555,9 @@ if uploaded_file is not None:
         use_container_width=True
     )
 
-    # -------------------------
-    # 최종 안내
-    # -------------------------
-
-    strong_warning_count = len(high_missing_variables)
+    strong_warning_count = len(
+        high_missing_variables
+    )
 
     check_item_count = (
         len(low_missing_variables)
@@ -564,4 +596,3 @@ if uploaded_file is not None:
         "데이터의 출처, 수집 목적, 표본 추출 방식, 측정 기준을 "
         "함께 고려하여 해석하세요."
     )
-   
