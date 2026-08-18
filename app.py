@@ -107,7 +107,9 @@ if uploaded_file is not None:
         column_data = data[column].dropna()
 
         if len(column_data) > 0:
-            category_ratio = column_data.value_counts(normalize=True)
+            category_ratio = column_data.value_counts(
+                normalize=True
+            )
 
             top_category = category_ratio.index[0]
             top_ratio = category_ratio.iloc[0] * 100
@@ -156,8 +158,9 @@ if uploaded_file is not None:
                 f"결측치 확인 필요: '{column}' 변수에 "
                 f"{missing_count[column]}개의 결측치 "
                 f"({missing_ratio[column]:.1f}%)가 있습니다. "
-                "결측치를 제외하거나 대체하는 방식에 따라 분석 결과가 "
-                "달라질 수 있으므로 처리 방법을 함께 확인해야 합니다."
+                "결측치를 제외하거나 대체하는 방식에 따라 "
+                "분석 결과가 달라질 수 있으므로 처리 방법을 "
+                "함께 확인해야 합니다."
             )
 
     for result in outlier_results:
@@ -166,9 +169,10 @@ if uploaded_file is not None:
 
             st.warning(
                 f"이상치 후보 확인 필요: '{result['변수']}' 변수에서 "
-                f"{result['이상치 후보 개수']}개의 이상치 후보가 확인되었습니다. "
-                "이를 바로 제거하지 말고 실제 관측값인지 입력 오류인지 확인하고, "
-                "분석 결과에 미치는 영향을 살펴볼 필요가 있습니다."
+                f"{result['이상치 후보 개수']}개의 이상치 후보가 "
+                "확인되었습니다. 이를 바로 제거하지 말고 실제 "
+                "관측값인지 입력 오류인지 확인하고, 분석 결과에 "
+                "미치는 영향을 살펴볼 필요가 있습니다."
             )
 
     for result in category_results:
@@ -247,3 +251,52 @@ if uploaded_file is not None:
             "확인하지 않은 내용을 모르는 상태에서 분석 결과를 "
             "과도하게 일반화하지 않도록 주의하세요."
         )
+
+    # 7. 최종 점검 요약
+    st.subheader("7. 최종 점검 요약")
+
+    missing_variable_count = int(
+        (missing_count > 0).sum()
+    )
+
+    outlier_variable_count = sum(
+        1
+        for result in outlier_results
+        if result["이상치 후보 개수"] > 0
+    )
+
+    imbalance_variable_count = sum(
+        1
+        for result in category_results
+        if result["비율(%)"] >= 80
+    )
+
+    summary_data = pd.DataFrame({
+        "점검 항목": [
+            "데이터 규모",
+            "결측치가 있는 변수",
+            "이상치 후보가 있는 변수",
+            "80% 이상 범주 쏠림 변수",
+            "데이터 맥락 확인"
+        ],
+        "결과": [
+            f"{row_count}행 × {column_count}열",
+            f"{missing_variable_count}개",
+            f"{outlier_variable_count}개",
+            f"{imbalance_variable_count}개",
+            f"{checked_count}/5"
+        ]
+    })
+
+    st.dataframe(
+        summary_data,
+        hide_index=True,
+        use_container_width=True
+    )
+
+    st.info(
+        "이 요약은 데이터에서 자동으로 확인할 수 있는 특징과 "
+        "사용자가 직접 확인한 맥락 항목을 정리한 것입니다. "
+        "결과를 합격·불합격이나 신뢰도 점수로 해석하지 말고, "
+        "각 점검 항목을 데이터 해석 과정에서 함께 고려하세요."
+    )
