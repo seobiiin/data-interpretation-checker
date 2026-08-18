@@ -44,7 +44,6 @@ if uploaded_file is not None:
     st.subheader("3. 이상치 후보 확인")
 
     numeric_columns = data.select_dtypes(include="number").columns
-
     outlier_results = []
 
     for column in numeric_columns:
@@ -68,7 +67,6 @@ if uploaded_file is not None:
         })
 
     outlier_info = pd.DataFrame(outlier_results)
-
     st.dataframe(outlier_info)
 
     st.info(
@@ -124,3 +122,60 @@ if uploaded_file is not None:
 
     else:
         st.write("확인할 범주형 변수가 없습니다.")
+
+    # 5. 해석 시 주의사항
+    st.subheader("5. 해석 시 주의사항")
+
+    warning_found = False
+
+    # 결측치 관련 주의사항
+    for column in data.columns:
+        if missing_count[column] > 0:
+            warning_found = True
+
+            st.warning(
+                f"결측치 확인 필요: '{column}' 변수에 "
+                f"{missing_count[column]}개의 결측치 "
+                f"({missing_ratio[column]:.1f}%)가 있습니다. "
+                "결측치를 제외하거나 대체하는 방식에 따라 분석 결과가 "
+                "달라질 수 있으므로 처리 방법을 함께 확인해야 합니다."
+            )
+
+    # 이상치 후보 관련 주의사항
+    for result in outlier_results:
+        if result["이상치 후보 개수"] > 0:
+            warning_found = True
+
+            st.warning(
+                f"이상치 후보 확인 필요: '{result['변수']}' 변수에서 "
+                f"{result['이상치 후보 개수']}개의 이상치 후보가 확인되었습니다. "
+                "이를 바로 제거하지 말고 실제 관측값인지 입력 오류인지 확인하고, "
+                "분석 결과에 미치는 영향을 살펴볼 필요가 있습니다."
+            )
+
+    # 범주 쏠림 관련 주의사항
+    for result in category_results:
+        if result["비율(%)"] >= 80:
+            warning_found = True
+
+            st.warning(
+                f"범주 분포 확인 필요: '{result['변수']}' 변수에서 "
+                f"'{result['가장 많은 범주']}' 범주가 "
+                f"전체의 {result['비율(%)']}%를 차지합니다. "
+                "이 분포가 실제 집단의 특성인지 표본 수집 과정에서 "
+                "나타난 것인지 확인한 뒤 해석해야 합니다."
+            )
+
+    # 자동 경고가 없는 경우
+    if not warning_found:
+        st.success(
+            "현재 설정한 자동 점검 기준에서는 별도의 주의 요소가 "
+            "발견되지 않았습니다."
+        )
+
+    st.info(
+        "자동 점검에서 주의 요소가 발견되지 않았더라도 데이터가 "
+        "신뢰할 수 있다고 자동으로 판단할 수는 없습니다. "
+        "데이터의 출처, 수집 목적, 표본 추출 방식, 누락된 정보와 같은 "
+        "맥락은 사용자가 별도로 확인해야 합니다."
+    )
