@@ -54,7 +54,8 @@ if uploaded_file is not None:
     )
 
     outlier_columns = [
-        column for column in numeric_columns
+        column
+        for column in numeric_columns
         if column not in excluded_columns
     ]
 
@@ -107,16 +108,21 @@ if uploaded_file is not None:
         column_data = data[column].dropna()
 
         if len(column_data) > 0:
+            category_counts = column_data.value_counts()
             category_ratio = column_data.value_counts(
                 normalize=True
             )
 
-            top_category = category_ratio.index[0]
+            top_category = category_counts.index[0]
+            top_count = int(category_counts.iloc[0])
+            total_count = len(column_data)
             top_ratio = category_ratio.iloc[0] * 100
 
             category_results.append({
                 "변수": column,
                 "가장 많은 범주": top_category,
+                "개수": top_count,
+                "전체 개수": total_count,
                 "비율(%)": round(top_ratio, 1)
             })
 
@@ -130,7 +136,9 @@ if uploaded_file is not None:
                 st.warning(
                     f"'{row['변수']}' 변수에서 "
                     f"'{row['가장 많은 범주']}' 범주가 "
-                    f"전체의 {row['비율(%)']}%를 차지합니다. "
+                    f"전체의 {row['비율(%)']}% "
+                    f"({row['개수']}/{row['전체 개수']}개)를 차지합니다. "
+                    "비율뿐 아니라 실제 관측 개수도 함께 확인하세요. "
                     "특정 범주에 데이터가 많이 분포되어 있으므로, "
                     "전체 집단으로 일반화할 때 데이터의 구성과 "
                     "수집 방식을 함께 확인할 필요가 있습니다."
@@ -139,7 +147,8 @@ if uploaded_file is not None:
         st.info(
             "특정 범주의 비율이 높다는 사실만으로 데이터가 "
             "잘못되었거나 편향되었다고 판단할 수는 없습니다. "
-            "실제 집단의 특성과 표본 수집 과정을 함께 확인해야 합니다."
+            "특히 표본 수가 적을 때는 비율만으로 판단하지 말고 "
+            "실제 관측 개수와 표본 수집 과정을 함께 확인해야 합니다."
         )
 
     else:
@@ -182,7 +191,9 @@ if uploaded_file is not None:
             st.warning(
                 f"범주 분포 확인 필요: '{result['변수']}' 변수에서 "
                 f"'{result['가장 많은 범주']}' 범주가 "
-                f"전체의 {result['비율(%)']}%를 차지합니다. "
+                f"전체의 {result['비율(%)']}% "
+                f"({result['개수']}/{result['전체 개수']}개)를 차지합니다. "
+                "비율과 실제 관측 개수를 함께 확인하고, "
                 "이 분포가 실제 집단의 특성인지 표본 수집 과정에서 "
                 "나타난 것인지 확인한 뒤 해석해야 합니다."
             )
@@ -238,7 +249,9 @@ if uploaded_file is not None:
 
     checked_count = sum(context_checks)
 
-    st.write(f"맥락 점검: {checked_count}/5 항목 확인")
+    st.write(
+        f"맥락 점검: {checked_count}/5 항목 확인"
+    )
 
     if checked_count == 5:
         st.success(
