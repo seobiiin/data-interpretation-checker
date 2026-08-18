@@ -89,12 +89,16 @@ if uploaded_file is not None:
 
         column_lower = str(column).lower()
 
-        if (
-            "번호" in str(column)
-            or column_lower == "id"
-            or column_lower.endswith("_id")
-        ):
-            default_exclude.append(column)
+       if (
+    "번호" in str(column)
+    or "학번" in str(column)
+    or column_lower == "id"
+    or column_lower.endswith("_id")
+    or column_lower == "고객id"
+    or column_lower == "customerid"
+    or column_lower == "studentid"
+):
+    default_exclude.append(column)
 
     excluded_columns = st.multiselect(
         "이상치 검사에서 제외할 변수를 선택하세요",
