@@ -18,9 +18,7 @@ if uploaded_file is not None:
     st.subheader("업로드한 데이터")
     st.dataframe(data)
 
-
-
-st.subheader("1. 데이터 규모 확인")
+    st.subheader("1. 데이터 규모 확인")
 
     row_count = data.shape[0]
     column_count = data.shape[1]
