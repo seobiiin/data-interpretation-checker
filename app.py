@@ -25,7 +25,8 @@ if uploaded_file is not None:
 
     st.write(f"표본 수(행): {row_count}개")
     st.write(f"변수 수(열): {column_count}개")
-            st.subheader("2. 결측치 확인")
+
+    st.subheader("2. 결측치 확인")
 
     missing_count = data.isnull().sum()
     missing_ratio = (data.isnull().sum() / len(data)) * 100
