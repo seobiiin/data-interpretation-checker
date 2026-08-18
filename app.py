@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import re
 
 st.set_page_config(
     page_title="데이터 해석 점검 도구",
@@ -9,7 +10,9 @@ st.set_page_config(
 )
 
 st.title("데이터 해석 점검 도구")
-st.write("CSV 파일을 업로드하면 데이터 해석 전에 확인해야 할 요소를 점검합니다.")
+st.write(
+    "CSV 파일을 업로드하면 데이터 해석 전에 확인해야 할 요소를 점검합니다."
+)
 
 uploaded_file = st.file_uploader(
     "CSV 파일을 업로드하세요",
@@ -18,7 +21,10 @@ uploaded_file = st.file_uploader(
 
 if uploaded_file is not None:
 
+    # --------------------------------------------------
     # CSV 읽기
+    # --------------------------------------------------
+
     try:
         data = pd.read_csv(uploaded_file)
     except UnicodeDecodeError:
@@ -66,7 +72,10 @@ if uploaded_file is not None:
         "결측치 비율(%)": missing_ratio
     })
 
-    st.dataframe(missing_info, use_container_width=True)
+    st.dataframe(
+        missing_info,
+        use_container_width=True
+    )
 
     # --------------------------------------------------
     # 3. 이상치 후보 확인
@@ -78,40 +87,141 @@ if uploaded_file is not None:
         include=np.number
     ).columns.tolist()
 
+    # --------------------------------------------------
+    # 식별자 후보 자동 추천 함수
+    # --------------------------------------------------
+
+    def is_identifier_candidate(column_name, series):
+
+        name = str(column_name)
+        name_lower = name.lower().strip()
+
+        non_null = series.dropna()
+
+        if len(non_null) == 0:
+            return False
+
+        # 1) 열 이름 기준
+        identifier_keywords = [
+            "id",
+            "번호",
+            "학번",
+            "코드",
+            "code",
+            "index",
+            "key",
+            "no"
+        ]
+
+        name_match = any(
+            keyword in name_lower
+            for keyword in identifier_keywords
+        )
+
+        # 2) 고유값 비율
+        unique_ratio = non_null.nunique() / len(non_null)
+
+        highly_unique = unique_ratio >= 0.95
+
+        # 3) 연속 증가 숫자 여부
+        sequential_number = False
+
+        if pd.api.types.is_numeric_dtype(non_null):
+
+            sorted_values = non_null.sort_values().reset_index(drop=True)
+
+            if len(sorted_values) >= 3:
+
+                differences = sorted_values.diff().dropna()
+
+                if len(differences) > 0:
+                    sequential_number = (
+                        differences.nunique() == 1
+                        and differences.iloc[0] == 1
+                    )
+
+        # 4) 문자열 ID 형태 여부
+        id_like_string = False
+
+        if non_null.dtype == "object":
+
+            sample_values = (
+                non_null
+                .astype(str)
+                .head(50)
+            )
+
+            id_pattern_count = 0
+
+            for value in sample_values:
+
+                if re.match(
+                    r"^[A-Za-z가-힣_-]*\d+[A-Za-z가-힣_-]*$",
+                    value
+                ):
+                    id_pattern_count += 1
+
+            if len(sample_values) > 0:
+
+                id_like_string = (
+                    id_pattern_count / len(sample_values)
+                    >= 0.8
+                )
+
+        # 최종 추천 규칙
+        if name_match and highly_unique:
+            return True
+
+        if name_match and sequential_number:
+            return True
+
+        if highly_unique and sequential_number:
+            return True
+
+        if name_match and id_like_string:
+            return True
+
+        return False
+
+    # 숫자형 변수 중 자동 제외 후보 찾기
     default_exclude = []
+
+    identifier_reasons = {}
 
     for column in numeric_columns:
 
-        column_name = str(column)
-        column_lower = column_name.lower().strip()
-
-        id_names = [
-            "id",
-            "고객id",
-            "학생id",
-            "회원id",
-            "사용자id",
-            "customerid",
-            "studentid",
-            "userid",
-            "memberid"
-        ]
-
-        if (
-            "번호" in column_name
-            or "학번" in column_name
-            or column_lower in id_names
-            or column_lower.endswith("_id")
+        if is_identifier_candidate(
+            column,
+            data[column]
         ):
             default_exclude.append(column)
+
+            identifier_reasons[column] = (
+                "열 이름이나 값의 고유성·연속성 등을 기준으로 "
+                "식별자 후보로 추천되었습니다."
+            )
+
+    if len(default_exclude) > 0:
+
+        st.info(
+            "다음 변수는 식별자일 가능성이 있어 "
+            "이상치 검사 제외 후보로 자동 선택했습니다: "
+            + ", ".join(map(str, default_exclude))
+        )
+
+    else:
+
+        st.info(
+            "자동으로 식별자 후보로 판단된 숫자형 변수는 없습니다."
+        )
 
     exclude_columns = st.multiselect(
         "이상치 검사에서 제외할 변수를 선택하세요",
         options=numeric_columns,
         default=default_exclude,
         help=(
-            "학생번호, 고객ID처럼 단순 식별 목적으로 사용하는 숫자형 변수는 "
-            "이상치 분석에서 제외하는 것이 좋습니다."
+            "앱이 식별자 후보를 자동 추천하지만 완전히 확정하지는 않습니다. "
+            "필요하면 선택을 해제하거나 다른 변수를 추가하세요."
         )
     )
 
@@ -129,11 +239,14 @@ if uploaded_file is not None:
         clean_data = data[column].dropna()
 
         if len(clean_data) < 4:
+
             outlier_results.append({
                 "변수": column,
                 "이상치 후보 개수": 0
             })
+
             outlier_details[column] = []
+
             continue
 
         q1 = clean_data.quantile(0.25)
@@ -158,13 +271,18 @@ if uploaded_file is not None:
     outlier_info = pd.DataFrame(outlier_results)
 
     if len(outlier_info) > 0:
+
         st.dataframe(
             outlier_info,
             hide_index=True,
             use_container_width=True
         )
+
     else:
-        st.info("이상치 검사를 수행할 숫자형 변수가 없습니다.")
+
+        st.info(
+            "이상치 검사를 수행할 숫자형 변수가 없습니다."
+        )
 
     for column, values in outlier_details.items():
 
@@ -253,7 +371,10 @@ if uploaded_file is not None:
         )
 
     else:
-        st.info("확인할 범주형 변수가 없습니다.")
+
+        st.info(
+            "확인할 범주형 변수가 없습니다."
+        )
 
     # --------------------------------------------------
     # 5. 해석 시 주의사항
@@ -421,6 +542,7 @@ if uploaded_file is not None:
     imbalance_variable_count = 0
 
     if len(category_info) > 0:
+
         imbalance_variable_count = int(
             (category_info["비율(%)"] >= 80).sum()
         )
