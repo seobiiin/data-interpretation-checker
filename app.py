@@ -12,33 +12,68 @@ st.set_page_config(
 st.title("데이터 해석 점검 도구")
 
 st.write(
-    "CSV 파일을 업로드하면 데이터 해석 전에 "
+    "CSV 또는 Excel 파일을 업로드하면 데이터 해석 전에 "
     "확인해야 할 요소를 점검합니다."
 )
 
 uploaded_file = st.file_uploader(
-    "CSV 파일을 업로드하세요",
-    type=["csv"]
+    "CSV 또는 Excel 파일을 업로드하세요",
+    type=["csv", "xlsx"]
 )
 
 if uploaded_file is not None:
 
     # ==================================================
-    # CSV 읽기
+    # CSV / Excel 읽기
     # ==================================================
 
-    try:
-        data = pd.read_csv(uploaded_file)
+    file_name = uploaded_file.name.lower()
 
-    except UnicodeDecodeError:
-        data = pd.read_csv(
-            uploaded_file,
-            encoding="cp949"
-        )
+    try:
+        if file_name.endswith(".csv"):
+            try:
+                data = pd.read_csv(uploaded_file)
+            except UnicodeDecodeError:
+                uploaded_file.seek(0)
+                data = pd.read_csv(
+                    uploaded_file,
+                    encoding="cp949"
+                )
+
+        elif file_name.endswith(".xlsx"):
+            excel_file = pd.ExcelFile(
+                uploaded_file,
+                engine="openpyxl"
+            )
+
+            sheet_names = excel_file.sheet_names
+
+            if len(sheet_names) > 1:
+                selected_sheet = st.selectbox(
+                    "분석할 Excel 시트를 선택하세요",
+                    options=sheet_names
+                )
+            else:
+                selected_sheet = sheet_names[0]
+                st.info(
+                    f"Excel 시트: '{selected_sheet}'"
+                )
+
+            data = pd.read_excel(
+                excel_file,
+                sheet_name=selected_sheet
+            )
+
+        else:
+            st.error(
+                "지원하지 않는 파일 형식입니다. "
+                "CSV(.csv) 또는 Excel(.xlsx) 파일을 업로드하세요."
+            )
+            st.stop()
 
     except Exception as e:
         st.error(
-            f"CSV 파일을 읽는 중 오류가 발생했습니다: {e}"
+            f"파일을 읽는 중 오류가 발생했습니다: {e}"
         )
         st.stop()
 
@@ -658,7 +693,7 @@ if uploaded_file is not None:
     )
 
     st.write(
-        "CSV 파일만으로는 데이터의 출처나 수집 과정을 "
+        "업로드한 데이터 파일만으로는 데이터의 출처나 수집 과정을 "
         "확인할 수 없습니다. 아래 항목을 직접 점검해 보세요."
     )
 
