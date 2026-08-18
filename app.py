@@ -17,3 +17,13 @@ if uploaded_file is not None:
 
     st.subheader("업로드한 데이터")
     st.dataframe(data)
+
+
+
+st.subheader("1. 데이터 규모 확인")
+
+    row_count = data.shape[0]
+    column_count = data.shape[1]
+
+    st.write(f"표본 수(행): {row_count}개")
+    st.write(f"변수 수(열): {column_count}개")
