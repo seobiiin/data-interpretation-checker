@@ -37,3 +37,38 @@ if uploaded_file is not None:
     })
 
     st.dataframe(missing_info)
+
+    st.subheader("3. 이상치 후보 확인")
+
+    numeric_columns = data.select_dtypes(include="number").columns
+
+    outlier_results = []
+
+    for column in numeric_columns:
+        column_data = data[column].dropna()
+
+        q1 = column_data.quantile(0.25)
+        q3 = column_data.quantile(0.75)
+        iqr = q3 - q1
+
+        lower_bound = q1 - 1.5 * iqr
+        upper_bound = q3 + 1.5 * iqr
+
+        outliers = column_data[
+            (column_data < lower_bound) |
+            (column_data > upper_bound)
+        ]
+
+        outlier_results.append({
+            "변수": column,
+            "이상치 후보 개수": len(outliers)
+        })
+
+    outlier_info = pd.DataFrame(outlier_results)
+
+    st.dataframe(outlier_info)
+
+    st.info(
+        "이상치 후보는 반드시 오류이거나 제거해야 하는 값이라는 뜻은 아닙니다. "
+        "실제 관측값인지 입력 오류인지 확인하고, 분석 결과에 미치는 영향을 함께 살펴볼 필요가 있습니다."
+    )
