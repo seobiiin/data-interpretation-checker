@@ -18,6 +18,7 @@ if uploaded_file is not None:
     st.subheader("업로드한 데이터")
     st.dataframe(data)
 
+    # 1. 데이터 규모 확인
     st.subheader("1. 데이터 규모 확인")
 
     row_count = data.shape[0]
@@ -26,6 +27,7 @@ if uploaded_file is not None:
     st.write(f"표본 수(행): {row_count}개")
     st.write(f"변수 수(열): {column_count}개")
 
+    # 2. 결측치 확인
     st.subheader("2. 결측치 확인")
 
     missing_count = data.isnull().sum()
@@ -38,6 +40,7 @@ if uploaded_file is not None:
 
     st.dataframe(missing_info)
 
+    # 3. 이상치 후보 확인
     st.subheader("3. 이상치 후보 확인")
 
     numeric_columns = data.select_dtypes(include="number").columns
@@ -70,5 +73,54 @@ if uploaded_file is not None:
 
     st.info(
         "이상치 후보는 반드시 오류이거나 제거해야 하는 값이라는 뜻은 아닙니다. "
-        "실제 관측값인지 입력 오류인지 확인하고, 분석 결과에 미치는 영향을 함께 살펴볼 필요가 있습니다."
+        "실제 관측값인지 입력 오류인지 확인하고, 분석 결과에 미치는 영향을 "
+        "함께 살펴볼 필요가 있습니다."
     )
+
+    # 4. 범주형 변수 쏠림 확인
+    st.subheader("4. 범주형 변수 쏠림 확인")
+
+    categorical_columns = data.select_dtypes(
+        include=["object", "category"]
+    ).columns
+
+    category_results = []
+
+    for column in categorical_columns:
+        column_data = data[column].dropna()
+
+        if len(column_data) > 0:
+            category_ratio = column_data.value_counts(normalize=True)
+
+            top_category = category_ratio.index[0]
+            top_ratio = category_ratio.iloc[0] * 100
+
+            category_results.append({
+                "변수": column,
+                "가장 많은 범주": top_category,
+                "비율(%)": round(top_ratio, 1)
+            })
+
+    category_info = pd.DataFrame(category_results)
+
+    if len(category_info) > 0:
+        st.dataframe(category_info)
+
+        for _, row in category_info.iterrows():
+            if row["비율(%)"] >= 80:
+                st.warning(
+                    f"'{row['변수']}' 변수에서 '{row['가장 많은 범주']}' 범주가 "
+                    f"전체의 {row['비율(%)']}%를 차지합니다. "
+                    "특정 범주에 데이터가 많이 분포되어 있으므로, "
+                    "전체 집단으로 일반화할 때 데이터의 구성과 수집 방식을 "
+                    "함께 확인할 필요가 있습니다."
+                )
+
+        st.info(
+            "특정 범주의 비율이 높다는 사실만으로 데이터가 잘못되었거나 "
+            "편향되었다고 판단할 수는 없습니다. "
+            "실제 집단의 특성과 표본 수집 과정을 함께 확인해야 합니다."
+        )
+
+    else:
+        st.write("확인할 범주형 변수가 없습니다.")
