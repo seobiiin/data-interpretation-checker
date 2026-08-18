@@ -382,45 +382,138 @@ if uploaded_file is not None:
             "확인하지 않은 내용을 모르는 상태에서 분석 결과를 "
             "과도하게 일반화하지 않도록 주의하세요."
         )
-
     # =========================
     # 7. 최종 점검 요약
     # =========================
 
     st.subheader("7. 최종 점검 요약")
 
-    missing_variable_count = int(
-        (missing_count > 0).sum()
-    )
+    # -------------------------
+    # 결측치 수준 계산
+    # -------------------------
 
-    outlier_variable_count = sum(
-        1
+    high_missing_variables = []
+    low_missing_variables = []
+
+    for column in data.columns:
+
+        count = int(missing_count[column])
+
+        if count == 0:
+            continue
+
+        ratio = float(missing_ratio[column])
+
+        if ratio >= 10:
+            high_missing_variables.append(column)
+        else:
+            low_missing_variables.append(column)
+
+    # -------------------------
+    # 이상치 후보 변수 계산
+    # -------------------------
+
+    outlier_variables = [
+        result["변수"]
         for result in outlier_results
         if result["이상치 후보 개수"] > 0
-    )
+    ]
 
-    imbalance_variable_count = sum(
-        1
+    # -------------------------
+    # 범주 쏠림 변수 계산
+    # -------------------------
+
+    imbalance_variables = [
+        result["변수"]
         for result in category_results
         if result["비율(%)"] >= 80
-    )
+    ]
 
-    summary_data = pd.DataFrame({
-        "점검 항목": [
-            "데이터 규모",
-            "결측치가 있는 변수",
-            "이상치 후보가 있는 변수",
-            "80% 이상 범주 쏠림 변수",
-            "데이터 맥락 확인"
-        ],
-        "결과": [
-            f"{row_count}행 × {column_count}열",
-            f"{missing_variable_count}개",
-            f"{outlier_variable_count}개",
-            f"{imbalance_variable_count}개",
-            f"{checked_count}/5"
-        ]
+    # -------------------------
+    # 요약표
+    # -------------------------
+
+    summary_rows = []
+
+    summary_rows.append({
+        "점검 항목": "데이터 규모",
+        "결과": f"{row_count}행 × {column_count}열",
+        "수준": "정보"
     })
+
+    if len(high_missing_variables) > 0:
+        summary_rows.append({
+            "점검 항목": "결측치",
+            "결과": (
+                f"주의 필요 {len(high_missing_variables)}개 변수 "
+                f"({', '.join(map(str, high_missing_variables))})"
+            ),
+            "수준": "주의"
+        })
+
+    if len(low_missing_variables) > 0:
+        summary_rows.append({
+            "점검 항목": "결측치",
+            "결과": (
+                f"낮은 비율 {len(low_missing_variables)}개 변수 "
+                f"({', '.join(map(str, low_missing_variables))})"
+            ),
+            "수준": "확인"
+        })
+
+    if (
+        len(high_missing_variables) == 0
+        and len(low_missing_variables) == 0
+    ):
+        summary_rows.append({
+            "점검 항목": "결측치",
+            "결과": "발견되지 않음",
+            "수준": "정보"
+        })
+
+    if len(outlier_variables) > 0:
+        summary_rows.append({
+            "점검 항목": "이상치 후보",
+            "결과": (
+                f"{len(outlier_variables)}개 변수 "
+                f"({', '.join(map(str, outlier_variables))})"
+            ),
+            "수준": "확인"
+        })
+    else:
+        summary_rows.append({
+            "점검 항목": "이상치 후보",
+            "결과": "발견되지 않음",
+            "수준": "정보"
+        })
+
+    if len(imbalance_variables) > 0:
+        summary_rows.append({
+            "점검 항목": "범주 쏠림",
+            "결과": (
+                f"{len(imbalance_variables)}개 변수 "
+                f"({', '.join(map(str, imbalance_variables))})"
+            ),
+            "수준": "확인"
+        })
+    else:
+        summary_rows.append({
+            "점검 항목": "범주 쏠림",
+            "결과": "발견되지 않음",
+            "수준": "정보"
+        })
+
+    summary_rows.append({
+        "점검 항목": "데이터 맥락",
+        "결과": f"{checked_count}/5 항목 확인",
+        "수준": (
+            "정보"
+            if checked_count == 5
+            else "확인"
+        )
+    })
+
+    summary_data = pd.DataFrame(summary_rows)
 
     st.dataframe(
         summary_data,
@@ -428,9 +521,47 @@ if uploaded_file is not None:
         use_container_width=True
     )
 
-    st.info(
-        "이 요약은 데이터에서 자동으로 확인할 수 있는 특징과 "
-        "사용자가 직접 확인한 맥락 항목을 정리한 것입니다. "
-        "결과를 합격·불합격이나 신뢰도 점수로 해석하지 말고, "
-        "각 점검 항목을 데이터 해석 과정에서 함께 고려하세요."
+    # -------------------------
+    # 최종 안내
+    # -------------------------
+
+    strong_warning_count = len(high_missing_variables)
+
+    check_item_count = (
+        len(low_missing_variables)
+        + len(outlier_variables)
+        + len(imbalance_variables)
     )
+
+    if strong_warning_count > 0:
+
+        st.warning(
+            f"현재 자동 점검에서 주의 수준 항목이 "
+            f"{strong_warning_count}개 확인되었습니다. "
+            "해당 항목이 분석 결과에 어떤 영향을 줄 수 있는지 "
+            "확인한 뒤 해석하세요."
+        )
+
+    elif check_item_count > 0:
+
+        st.info(
+            "강한 주의 수준의 항목은 없지만 추가로 확인할 "
+            "데이터 특성이 있습니다. 이것만으로 데이터의 "
+            "품질이나 신뢰성을 판단하지 말고 분석 목적과 "
+            "데이터 맥락을 함께 고려하세요."
+        )
+
+    else:
+
+        st.success(
+            "현재 설정한 자동 점검 기준에서는 강한 주의 "
+            "요소가 발견되지 않았습니다."
+        )
+
+    st.info(
+        "이 결과는 데이터의 품질을 합격·불합격으로 판정하거나 "
+        "신뢰도 점수를 계산한 것이 아닙니다. 자동 점검 결과와 "
+        "데이터의 출처, 수집 목적, 표본 추출 방식, 측정 기준을 "
+        "함께 고려하여 해석하세요."
+    )
+   
